@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+require "gst"
+
+file = ARGV[0]
+
+print Gst::Template.new(File.read(file)).render
