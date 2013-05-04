@@ -42,11 +42,17 @@ module Gst
       return @erb_template if defined?(@erb_template)
       path = File.expand_path(File.join(File.dirname(__FILE__), 'template.erb'))
       data = File.read path
-      @erb_template = ERB.new(data)
+      @erb_template = ERB.new(data, nil, '-')
     end
 
     def segments
-      [StringSegment.new(body)]
+      body.scan(/<%.*?%>|(?:[^<](?!=))+/).map do |s|
+        if m = s[/(?<=\A<%).*(?=%>\Z)/]
+          GoSegment.new m
+        else
+          StringSegment.new s
+        end
+      end
     end
   end
 
@@ -57,6 +63,16 @@ module Gst
 
     def to_go
       "io.WriteString(writer, `#{@content}`)"
+    end
+  end
+
+  class GoSegment
+    def initialize(content)
+      @content = content
+    end
+
+    def to_go
+      @content
     end
   end
 end

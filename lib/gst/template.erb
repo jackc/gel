@@ -5,6 +5,8 @@ import (
 )
 
 func <%= func %>(writer io.Writer) (err error) {
-	<% segments.each do |s| %><%= s.to_go %><% end %>
+	<%- segments.each do |s| -%>
+		<%= s.to_go %>
+	<%- end -%>
 	return
 }

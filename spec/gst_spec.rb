@@ -34,4 +34,26 @@ func main() {
     output = `cd #{$tmpdir}; go run main.go hello_world.go`
     output.should eq "Hello, World!\n"
   end
+
+  it "executes go code" do
+    gst("spec/examples/hey_hey_hey/hey_hey_hey.gst > #{$tmpdir}/hey_hey_hey.go")
+    File.open("#{$tmpdir}/main.go", "w") do |f|
+      f.puts <<-GO
+package main
+
+import (
+  "bytes"
+  "fmt"
+)
+
+func main() {
+  var b bytes.Buffer
+  HeyHeyHey(&b)
+  fmt.Print(b.String())
+}
+      GO
+    end
+    output = `cd #{$tmpdir}; go run main.go hey_hey_hey.go`
+    output.should eq "Hey! Hey! Hey! \n"
+  end
 end
