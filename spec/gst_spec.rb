@@ -47,4 +47,11 @@ describe "gst" do
     output = `cd #{$tmpdir}; go run main.go escape_html.go`
     output.should eq "<p>Hello, &lt;Jack&gt;!</p>\n"
   end
+
+  it "includes parameters in function" do
+    gst("spec/examples/parameters/parameters.gst > #{$tmpdir}/parameters.go")
+    FileUtils.cp("spec/examples/parameters/main.go", $tmpdir)
+    output = `cd #{$tmpdir}; go run main.go parameters.go`
+    output.should eq "Hello, Jack!\nHello, Jack!\nHello, Jack!\n"
+  end
 end

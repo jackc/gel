@@ -38,6 +38,15 @@ module Gst
       metadata.fetch("func")
     end
 
+    def parameters
+      default = "writer io.Writer"
+      if additional_parameters = metadata["parameters"]
+        "#{default}, #{additional_parameters}"
+      else
+        default
+      end
+    end
+
     def escape
       metadata["escape"]
     end
