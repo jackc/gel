@@ -54,4 +54,12 @@ describe "gst" do
     output = `cd #{$tmpdir}; go run main.go parameters.go`
     output.should eq "Hello, Jack!\nHello, Jack!\nHello, Jack!\n"
   end
+
+
+  it "includes imports" do
+    gst("spec/examples/imports/imports.gst > #{$tmpdir}/imports.go")
+    FileUtils.cp("spec/examples/imports/main.go", $tmpdir)
+    output = `cd #{$tmpdir}; go run main.go imports.go`
+    output.should eq "1"
+  end
 end

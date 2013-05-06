@@ -31,7 +31,8 @@ module Gst
     end
 
     def imports
-      (["io"] + segments.map(&:imports).flatten.compact).uniq
+      additional_imports = metadata.fetch("imports", "").split.map(&:strip)
+      (["io"] + segments.map(&:imports).flatten.compact + additional_imports).uniq
     end
 
     def func
