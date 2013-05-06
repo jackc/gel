@@ -40,4 +40,11 @@ describe "gst" do
     output = `cd #{$tmpdir}; go run main.go integer_interpolation.go`
     output.should eq "1, 2, 3, 4, 5\n"
   end
+
+  it "escapes for HTML by default when escape html set" do
+    gst("spec/examples/escape_html/escape_html.gst > #{$tmpdir}/escape_html.go")
+    FileUtils.cp("spec/examples/escape_html/main.go", $tmpdir)
+    output = `cd #{$tmpdir}; go run main.go escape_html.go`
+    output.should eq "<p>Hello, &lt;Jack&gt;!</p>\n"
+  end
 end

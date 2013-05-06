@@ -38,6 +38,20 @@ module Gst
       metadata.fetch("func")
     end
 
+    def escape
+      metadata["escape"]
+    end
+
+    def new_default_string_segment(content)
+      if escape == "html"
+        HTMLEscapedStringInterpolationSegment.new content
+      elsif escape == nil
+        StringInterpolationSegment.new content
+      else
+        raise "Unknown escape type"
+      end
+    end
+
     def erb_template
       return @erb_template if defined?(@erb_template)
       path = File.expand_path(File.join(File.dirname(__FILE__), 'template.erb'))
@@ -48,11 +62,11 @@ module Gst
     def segments
       return @segments if defined?(@segments)
 
-      @segements = body.scan(/<%.*?%>|(?:[^<](?!=))+/).map do |s|
+      @segements = body.scan(/<%.*?%>|(?:[^<]|<(?!%))+/).map do |s|
         if m = s[/(?<=\A<%=i).*(?=%>\Z)/]
           IntegerInterpolationSegment.new m
         elsif m = s[/(?<=\A<%=).*(?=%>\Z)/]
-          StringInterpolationSegment.new m
+          new_default_string_segment(m)
         elsif m = s[/(?<=\A<%).*(?=%>\Z)/]
           GoSegment.new m
         else
@@ -87,6 +101,16 @@ module Gst
   class StringInterpolationSegment < Segment
     def to_go
       "io.WriteString(writer, #{@content})"
+    end
+  end
+
+  class HTMLEscapedStringInterpolationSegment < Segment
+    def to_go
+      "io.WriteString(writer, html.EscapeString(#{@content}))"
+    end
+
+    def imports
+      %w[html]
     end
   end
 
