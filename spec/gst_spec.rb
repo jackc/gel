@@ -56,4 +56,26 @@ func main() {
     output = `cd #{$tmpdir}; go run main.go hey_hey_hey.go`
     output.should eq "Hey! Hey! Hey! \n"
   end
+
+  it "interpolates strings" do
+    gst("spec/examples/string_interpolation/string_interpolation.gst > #{$tmpdir}/string_interpolation.go")
+    File.open("#{$tmpdir}/main.go", "w") do |f|
+      f.puts <<-GO
+package main
+
+import (
+  "bytes"
+  "fmt"
+)
+
+func main() {
+  var b bytes.Buffer
+  StringInterpolation(&b)
+  fmt.Print(b.String())
+}
+      GO
+    end
+    output = `cd #{$tmpdir}; go run main.go string_interpolation.go`
+    output.should eq "Hello, Jack!\n"
+  end
 end

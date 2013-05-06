@@ -47,7 +47,9 @@ module Gst
 
     def segments
       body.scan(/<%.*?%>|(?:[^<](?!=))+/).map do |s|
-        if m = s[/(?<=\A<%).*(?=%>\Z)/]
+        if m = s[/(?<=\A<%=).*(?=%>\Z)/]
+          StringInterpolationSegment.new m
+        elsif m = s[/(?<=\A<%).*(?=%>\Z)/]
           GoSegment.new m
         else
           StringSegment.new s
@@ -73,6 +75,16 @@ module Gst
 
     def to_go
       @content
+    end
+  end
+
+  class StringInterpolationSegment
+    def initialize(content)
+      @content = content
+    end
+
+    def to_go
+      "io.WriteString(writer, #{@content})"
     end
   end
 end
