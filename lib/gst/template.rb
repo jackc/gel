@@ -31,7 +31,7 @@ module Gst
     end
 
     def imports
-      ["io"]
+      (["io"] + segments.map(&:imports).flatten.compact).uniq
     end
 
     def func
@@ -46,8 +46,12 @@ module Gst
     end
 
     def segments
-      body.scan(/<%.*?%>|(?:[^<](?!=))+/).map do |s|
-        if m = s[/(?<=\A<%=).*(?=%>\Z)/]
+      return @segments if defined?(@segments)
+
+      @segements = body.scan(/<%.*?%>|(?:[^<](?!=))+/).map do |s|
+        if m = s[/(?<=\A<%=i).*(?=%>\Z)/]
+          IntegerInterpolationSegment.new m
+        elsif m = s[/(?<=\A<%=).*(?=%>\Z)/]
           StringInterpolationSegment.new m
         elsif m = s[/(?<=\A<%).*(?=%>\Z)/]
           GoSegment.new m
@@ -58,33 +62,41 @@ module Gst
     end
   end
 
-  class StringSegment
+  class Segment
     def initialize(content)
       @content = content
     end
 
+    def imports
+      []
+    end
+  end
+
+  class StringSegment < Segment
     def to_go
       "io.WriteString(writer, `#{@content}`)"
     end
   end
 
-  class GoSegment
-    def initialize(content)
-      @content = content
-    end
-
+  class GoSegment < Segment
     def to_go
       @content
     end
   end
 
-  class StringInterpolationSegment
-    def initialize(content)
-      @content = content
-    end
-
+  class StringInterpolationSegment < Segment
     def to_go
       "io.WriteString(writer, #{@content})"
+    end
+  end
+
+  class IntegerInterpolationSegment < Segment
+    def to_go
+      "io.WriteString(writer, strconv.FormatInt(int64(#{@content}), 10))"
+    end
+
+    def imports
+      %w[strconv]
     end
   end
 end

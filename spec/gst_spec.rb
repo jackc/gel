@@ -78,4 +78,26 @@ func main() {
     output = `cd #{$tmpdir}; go run main.go string_interpolation.go`
     output.should eq "Hello, Jack!\n"
   end
+
+  it "interpolates integers" do
+    gst("spec/examples/integer_interpolation/integer_interpolation.gst > #{$tmpdir}/integer_interpolation.go")
+    File.open("#{$tmpdir}/main.go", "w") do |f|
+      f.puts <<-GO
+package main
+
+import (
+  "bytes"
+  "fmt"
+)
+
+func main() {
+  var b bytes.Buffer
+  IntegerInterpolation(&b)
+  fmt.Print(b.String())
+}
+      GO
+    end
+    output = `cd #{$tmpdir}; go run main.go integer_interpolation.go`
+    output.should eq "1, 2, 3, 4, 5\n"
+  end
 end

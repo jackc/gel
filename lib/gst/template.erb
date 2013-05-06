@@ -1,7 +1,9 @@
 package <%= package %>
 
 import (
-	<% imports.each do |i| %>"<%= i %>"<% end %>
+	<%- imports.each do |i| -%>
+		"<%= i %>"
+	<%- end -%>
 )
 
 func <%= func %>(writer io.Writer) (err error) {
