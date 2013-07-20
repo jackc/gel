@@ -8,7 +8,16 @@ GST is a templating library that compiles templates into Go functions.
 
 ## Usage
 
-    $ gst users_index.gst
+    $ gst users_index.gst | gofmt > users_index.go
+
+## Example
+
+package: main
+func: EscapeHtml
+escape: html
+---
+<p>Hello, <%= "<Jack>" %>!</p>
+
 
 ## Contributing
 
