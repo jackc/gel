@@ -72,7 +72,7 @@ module Gst
     def segments
       return @segments if defined?(@segments)
 
-      @segements = body.scan(/<%.*?%>|(?:[^<]|<(?!%))+/).map do |s|
+      @segments = body.scan(/<%.*?%>|(?:[^<]|<(?!%))+/).map do |s|
         if m = s[/(?<=\A<%=i).*(?=%>\Z)/]
           IntegerInterpolationSegment.new m
         elsif m = s[/(?<=\A<%=).*(?=%>\Z)/]
