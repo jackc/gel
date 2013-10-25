@@ -17,29 +17,42 @@ type Template struct {
 	Imports    map[string]bool
 	Escape     string
 	Body       bytes.Buffer
+	StringBody string
 }
 
-func parseTemplate(templateBytes []byte) (t *Template, err error) {
-	t = new(Template)
-
+func (t *Template) Parse(templateBytes []byte) (err error) {
 	regions := bytes.SplitN(templateBytes, []byte("\n---\n"), 2)
 
 	if len(regions) != 2 {
-		return nil, errors.New("Did not find divider between header and body.")
+		return errors.New("Did not find divider between header and body.")
 	}
 
-	yf := new(yaml.File)
-	yf.Root, err = yaml.Parse(bytes.NewReader(regions[0]))
+	err = t.parseHeader(regions[0])
 	if err != nil {
-		return nil, fmt.Errorf("Unable to parse YAML header: %v", err)
+		return err
+	}
+
+	err = t.parseBody(regions[1])
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *Template) parseHeader(header []byte) (err error) {
+	yf := new(yaml.File)
+	yf.Root, err = yaml.Parse(bytes.NewReader(header))
+	if err != nil {
+		return fmt.Errorf("Unable to parse YAML header: %v", err)
 	}
 
 	t.FuncName, err = yf.Get("func")
 	if err != nil {
-		return nil, errors.New(`Missing "func"`)
+		return errors.New(`Missing "func"`)
 	}
 
-	t.Escape, err = yf.Get("escape")
+	t.Escape, _ = yf.Get("escape")
 
 	t.Parameters = "writer io.Writer"
 	var extraParameters string
@@ -58,14 +71,18 @@ func parseTemplate(templateBytes []byte) (t *Template, err error) {
 		}
 	}
 
-	unparsed := regions[1]
+	return nil
+}
+
+func (t *Template) parseBody(body []byte) (err error) {
+	unparsed := body
 
 	for len(unparsed) > 0 {
 		next := bytes.Index(unparsed, []byte("<%"))
 		switch {
 		case next > 0:
 			segment := unparsed[:next]
-			parseStringSegment(&t.Body, segment)
+			t.writeStringSegment(segment)
 			unparsed = unparsed[next:]
 		case next == 0:
 			unparsed = unparsed[2:]
@@ -73,69 +90,87 @@ func parseTemplate(templateBytes []byte) (t *Template, err error) {
 
 			if endGo > -1 {
 				segment := unparsed[:endGo]
-				switch {
-				case bytes.HasPrefix(segment, []byte("=i")):
-					t.Imports["strconv"] = true
-					segment = segment[2:]
-					parseIntegerInterpolationSegment(&t.Body, segment)
 
-				case bytes.HasPrefix(segment, []byte("=")):
-					segment = segment[1:]
-					switch t.Escape {
-					case "":
-						parseStringInterpolationSegment(&t.Body, segment)
-					case "html":
-						t.Imports["html"] = true
-						parseHTMLEscapedStringInterpolationSegment(&t.Body, segment)
-					default:
-						return nil, errors.New("Unknown escape type")
-					}
-
-				default:
-					parseGoSegment(&t.Body, segment)
+				if segment[0] == '=' {
+					t.writeInterpolationSegment(segment[1:])
+				} else {
+					t.writeGoSegment(segment)
 				}
+
 				unparsed = unparsed[endGo+2:]
 			} else {
-				return nil, errors.New("Unable to parse")
+				return errors.New("Unable to parse")
 			}
 		default:
 			segment := unparsed
-			parseStringSegment(&t.Body, segment)
+			t.writeStringSegment(segment)
 			unparsed = nil
 			break
 		}
 	}
 
-	return t, nil
+	t.StringBody = t.Body.String()
+
+	return nil
 }
 
-func parseHTMLEscapedStringInterpolationSegment(buf *bytes.Buffer, segment []byte) {
-	buf.WriteString("io.WriteString(writer, html.EscapeString(")
-	buf.Write(segment)
-	buf.WriteString("))\n")
+func (t *Template) writeStringSegment(segment []byte) (err error) {
+	t.Body.WriteString("io.WriteString(writer, `")
+	t.Body.Write(segment)
+	t.Body.WriteString("`)\n")
+	return nil
 }
 
-func parseStringSegment(buf *bytes.Buffer, segment []byte) {
-	buf.WriteString("io.WriteString(writer, `")
-	buf.Write(segment)
-	buf.WriteString("`)\n")
+func (t *Template) writeInterpolationSegment(segment []byte) (err error) {
+	switch {
+	case segment[0] == 'i':
+		t.Imports["strconv"] = true
+		segment = segment[1:]
+		t.writeIntegerInterpolationSegment(segment)
+	default:
+		t.writeStringInterpolationSegment(segment)
+	}
+
+	return nil
 }
 
-func parseGoSegment(buf *bytes.Buffer, segment []byte) {
-	buf.Write(segment)
-	buf.WriteString("\n")
+func (t *Template) writeIntegerInterpolationSegment(segment []byte) (err error) {
+	t.Body.WriteString("io.WriteString(writer, strconv.FormatInt(int64(")
+	t.Body.Write(segment)
+	t.Body.WriteString("), 10))\n")
+	return nil
 }
 
-func parseStringInterpolationSegment(buf *bytes.Buffer, segment []byte) {
-	buf.WriteString("io.WriteString(writer, ")
-	buf.Write(segment)
-	buf.WriteString(")\n")
+func (t *Template) writeStringInterpolationSegment(segment []byte) (err error) {
+	switch t.Escape {
+	case "":
+		return t.writeRawStringInterpolationSegment(segment)
+	case "html":
+		t.Imports["html"] = true
+		return t.writeHTMLEscapedStringInterpolationSegment(segment)
+	default:
+		return errors.New("Unknown escape type")
+	}
 }
 
-func parseIntegerInterpolationSegment(buf *bytes.Buffer, segment []byte) {
-	buf.WriteString("io.WriteString(writer, strconv.FormatInt(int64(")
-	buf.Write(segment)
-	buf.WriteString("), 10))\n")
+func (t *Template) writeRawStringInterpolationSegment(segment []byte) (err error) {
+	t.Body.WriteString("io.WriteString(writer, ")
+	t.Body.Write(segment)
+	t.Body.WriteString(")\n")
+	return nil
+}
+
+func (t *Template) writeHTMLEscapedStringInterpolationSegment(segment []byte) (err error) {
+	t.Body.WriteString("io.WriteString(writer, html.EscapeString(")
+	t.Body.Write(segment)
+	t.Body.WriteString("))\n")
+	return nil
+}
+
+func (t *Template) writeGoSegment(segment []byte) (err error) {
+	t.Body.Write(segment)
+	t.Body.WriteString("\n")
+	return nil
 }
 
 func main() {
@@ -149,7 +184,7 @@ import (
 )
 
 func {{.FuncName}}({{.Parameters}}) (err error) {
-  {{.Body}}
+  {{.StringBody}}
   return
 }`))
 
@@ -160,8 +195,8 @@ func {{.FuncName}}({{.Parameters}}) (err error) {
 			os.Exit(1)
 		}
 
-		var t *Template
-		t, err = parseTemplate(fileBytes)
+		var t Template
+		err = t.Parse(fileBytes)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid template format: %v", err)
 			os.Exit(1)
