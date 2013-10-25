@@ -119,33 +119,33 @@ func (t *Template) parseBody(body []byte) (err error) {
 		case next == 0:
 			unparsed = unparsed[2:]
 			endGo := bytes.Index(unparsed, []byte("%>"))
-
-			if endGo > -1 {
-				segment := unparsed[:endGo]
-
-				if segment[0] == '=' {
-					if segment[1] == 'i' {
-						t.Imports["strconv"] = true
-						t.Segments = append(t.Segments, IntegerInterpolationSegment(segment[2:]))
-					} else {
-						switch t.Escape {
-						case "":
-							t.Segments = append(t.Segments, RawStringInterpolationSegment(segment[1:]))
-						case "html":
-							t.Imports["html"] = true
-							t.Segments = append(t.Segments, HTMLEscapedStringInterpolationSegment(segment[1:]))
-						default:
-							return errors.New("Unknown escape type")
-						}
-					}
-				} else {
-					t.Segments = append(t.Segments, GoSegment(segment))
-				}
-
-				unparsed = unparsed[endGo+2:]
-			} else {
+			if endGo == -1 {
 				return errors.New("Unable to parse")
 			}
+
+			segment := unparsed[:endGo]
+
+			if segment[0] == '=' {
+				if segment[1] == 'i' {
+					t.Imports["strconv"] = true
+					t.Segments = append(t.Segments, IntegerInterpolationSegment(segment[2:]))
+				} else {
+					switch t.Escape {
+					case "":
+						t.Segments = append(t.Segments, RawStringInterpolationSegment(segment[1:]))
+					case "html":
+						t.Imports["html"] = true
+						t.Segments = append(t.Segments, HTMLEscapedStringInterpolationSegment(segment[1:]))
+					default:
+						return errors.New("Unknown escape type")
+					}
+				}
+			} else {
+				t.Segments = append(t.Segments, GoSegment(segment))
+			}
+
+			unparsed = unparsed[endGo+2:]
+
 		default:
 			t.Segments = append(t.Segments, StringSegment(unparsed))
 			unparsed = nil
