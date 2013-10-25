@@ -15,4 +15,5 @@ desc 'Build gst'
 task build: 'gst'
 
 RSpec::Core::RakeTask.new(:spec)
+task spec: :build
 task :default => :spec
