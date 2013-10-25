@@ -15,7 +15,37 @@ type Template struct {
 	Parameters string
 	Imports    map[string]bool
 	Escape     string
-	Body       bytes.Buffer
+	Segments   []io.WriterTo
+}
+
+type StringSegment []byte
+
+func (s StringSegment) WriteTo(w io.Writer) (n int64, err error) {
+	return writeWrapped(w, "io.WriteString(writer, `", s, "`)\n")
+}
+
+type GoSegment []byte
+
+func (s GoSegment) WriteTo(w io.Writer) (n int64, err error) {
+	return writeMultiple(w, s, []byte("\n"))
+}
+
+type IntegerInterpolationSegment []byte
+
+func (s IntegerInterpolationSegment) WriteTo(w io.Writer) (n int64, err error) {
+	return writeWrapped(w, "io.WriteString(writer, strconv.FormatInt(int64(", s, "), 10))\n")
+}
+
+type RawStringInterpolationSegment []byte
+
+func (s RawStringInterpolationSegment) WriteTo(w io.Writer) (n int64, err error) {
+	return writeWrapped(w, "io.WriteString(writer, ", s, ")\n")
+}
+
+type HTMLEscapedStringInterpolationSegment []byte
+
+func (s HTMLEscapedStringInterpolationSegment) WriteTo(w io.Writer) (n int64, err error) {
+	return writeWrapped(w, "io.WriteString(writer, html.EscapeString(", s, "))\n")
 }
 
 func (t *Template) Parse(templateBytes []byte) (err error) {
@@ -84,7 +114,7 @@ func (t *Template) parseBody(body []byte) (err error) {
 		switch {
 		case next > 0:
 			segment := unparsed[:next]
-			t.writeStringSegment(segment)
+			t.Segments = append(t.Segments, StringSegment(segment))
 			unparsed = unparsed[next:]
 		case next == 0:
 			unparsed = unparsed[2:]
@@ -94,9 +124,22 @@ func (t *Template) parseBody(body []byte) (err error) {
 				segment := unparsed[:endGo]
 
 				if segment[0] == '=' {
-					t.writeInterpolationSegment(segment[1:])
+					if segment[1] == 'i' {
+						t.Imports["strconv"] = true
+						t.Segments = append(t.Segments, IntegerInterpolationSegment(segment[2:]))
+					} else {
+						switch t.Escape {
+						case "":
+							t.Segments = append(t.Segments, RawStringInterpolationSegment(segment[1:]))
+						case "html":
+							t.Imports["html"] = true
+							t.Segments = append(t.Segments, HTMLEscapedStringInterpolationSegment(segment[1:]))
+						default:
+							return errors.New("Unknown escape type")
+						}
+					}
 				} else {
-					t.writeGoSegment(segment)
+					t.Segments = append(t.Segments, GoSegment(segment))
 				}
 
 				unparsed = unparsed[endGo+2:]
@@ -104,64 +147,13 @@ func (t *Template) parseBody(body []byte) (err error) {
 				return errors.New("Unable to parse")
 			}
 		default:
-			segment := unparsed
-			t.writeStringSegment(segment)
+			t.Segments = append(t.Segments, StringSegment(unparsed))
 			unparsed = nil
 			break
 		}
 	}
 
 	return nil
-}
-
-func (t *Template) writeStringSegment(segment []byte) (err error) {
-	_, err = writeWrapped(&t.Body, "io.WriteString(writer, `", segment, "`)\n")
-	return err
-}
-
-func (t *Template) writeInterpolationSegment(segment []byte) (err error) {
-	switch {
-	case segment[0] == 'i':
-		t.Imports["strconv"] = true
-		segment = segment[1:]
-		t.writeIntegerInterpolationSegment(segment)
-	default:
-		t.writeStringInterpolationSegment(segment)
-	}
-
-	return nil
-}
-
-func (t *Template) writeIntegerInterpolationSegment(segment []byte) (err error) {
-	_, err = writeWrapped(&t.Body, "io.WriteString(writer, strconv.FormatInt(int64(", segment, "), 10))\n")
-	return err
-}
-
-func (t *Template) writeStringInterpolationSegment(segment []byte) (err error) {
-	switch t.Escape {
-	case "":
-		return t.writeRawStringInterpolationSegment(segment)
-	case "html":
-		t.Imports["html"] = true
-		return t.writeHTMLEscapedStringInterpolationSegment(segment)
-	default:
-		return errors.New("Unknown escape type")
-	}
-}
-
-func (t *Template) writeRawStringInterpolationSegment(segment []byte) (err error) {
-	_, err = writeWrapped(&t.Body, "io.WriteString(writer, ", segment, ")\n")
-	return err
-}
-
-func (t *Template) writeHTMLEscapedStringInterpolationSegment(segment []byte) (err error) {
-	_, err = writeWrapped(&t.Body, "io.WriteString(writer, html.EscapeString(", segment, "))\n")
-	return err
-}
-
-func (t *Template) writeGoSegment(segment []byte) (err error) {
-	_, err = writeMultiple(&t.Body, segment, []byte("\n"))
-	return err
 }
 
 func writeWrapped(w io.Writer, prefix string, data []byte, suffix string) (count int64, err error) {
@@ -216,7 +208,10 @@ func main() {
 	fmt.Printf(")\n")
 
 	for _, t := range templates {
-
-		fmt.Printf("func %s(%s) (err error) {\n%s\nreturn\n}\n", t.FuncName, t.Parameters, t.Body.String())
+		fmt.Printf("func %s(%s) (err error) {\n", t.FuncName, t.Parameters)
+		for _, s := range t.Segments {
+			s.WriteTo(os.Stdout)
+		}
+		fmt.Printf("\nreturn\n}\n")
 	}
 }
