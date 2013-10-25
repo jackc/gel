@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/kylelemons/go-gypsy/yaml"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -39,22 +38,26 @@ func (t *Template) Parse(templateBytes []byte) (err error) {
 }
 
 func (t *Template) parseHeader(header []byte) (err error) {
-	yf := new(yaml.File)
-	yf.Root, err = yaml.Parse(bytes.NewReader(header))
-	if err != nil {
-		return fmt.Errorf("Unable to parse YAML header: %v", err)
+	lines := bytes.Split(header, []byte("\n"))
+	options := make(map[string]string, len(lines))
+	for i, l := range lines {
+		pair := bytes.SplitN(l, []byte(":"), 2)
+		if len(pair) != 2 {
+			return fmt.Errorf("Bad header line: %d", i)
+		}
+		options[string(pair[0])] = string(bytes.Trim(pair[1], " "))
 	}
 
-	t.FuncName, err = yf.Get("func")
-	if err != nil {
+	t.FuncName = options["func"]
+	if t.FuncName == "" {
 		return errors.New(`Missing "func"`)
 	}
 
-	t.Escape, _ = yf.Get("escape")
+	t.Escape = options["escape"]
 
 	t.Parameters = "writer io.Writer"
 	var extraParameters string
-	extraParameters, _ = yf.Get("parameters")
+	extraParameters = options["parameters"]
 	if len(extraParameters) > 0 {
 		t.Parameters = t.Parameters + ", " + extraParameters
 	}
@@ -62,7 +65,7 @@ func (t *Template) parseHeader(header []byte) (err error) {
 	t.Imports = map[string]bool{"io": true}
 
 	var extraImports string
-	extraImports, _ = yf.Get("imports")
+	extraImports = options["imports"]
 	if len(extraImports) > 0 {
 		for _, pkg := range strings.Split(extraImports, " ") {
 			t.Imports[strings.Trim(pkg, " ")] = true
