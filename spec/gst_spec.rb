@@ -6,9 +6,7 @@ FileUtils.mkdir_p $tmpdir
 
 RSpec.configure do |config|
   def gst(args="")
-    lib = File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
-    bin = File.expand_path(File.join(File.dirname(__FILE__), '..', 'bin', 'gst'))
-    `ruby -I #{lib} #{bin} #{args}`
+    `./gst #{args}`
   end
 end
 

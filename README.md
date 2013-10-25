@@ -4,7 +4,7 @@ GST is a templating library that compiles templates into Go functions.
 
 ## Installation
 
-    $ gem install gst
+    $ go get gst
 
 ## Usage
 
