@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"text/template"
 )
 
 type Template struct {
@@ -17,7 +16,6 @@ type Template struct {
 	Imports    map[string]bool
 	Escape     string
 	Body       bytes.Buffer
-	StringBody string
 }
 
 func (t *Template) Parse(templateBytes []byte) (err error) {
@@ -109,8 +107,6 @@ func (t *Template) parseBody(body []byte) (err error) {
 		}
 	}
 
-	t.StringBody = t.Body.String()
-
 	return nil
 }
 
@@ -174,19 +170,8 @@ func (t *Template) writeGoSegment(segment []byte) (err error) {
 }
 
 func main() {
-	output := template.Must(template.New("compiledTemplate").Parse(`
-package main
 
-import (
-  {{range $key, $val := .Imports}}
-  "{{$key}}"
-  {{end}}
-)
-
-func {{.FuncName}}({{.Parameters}}) (err error) {
-  {{.StringBody}}
-  return
-}`))
+	templates := make([]*Template, 0, len(os.Args[1:]))
 
 	for _, path := range os.Args[1:] {
 		fileBytes, err := ioutil.ReadFile(path)
@@ -201,11 +186,25 @@ func {{.FuncName}}({{.Parameters}}) (err error) {
 			fmt.Fprintf(os.Stderr, "Invalid template format: %v", err)
 			os.Exit(1)
 		}
+		templates = append(templates, &t)
+	}
 
-		err = output.Execute(os.Stdout, t)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Template execute error: %v", err)
-			os.Exit(1)
+	imports := make(map[string]bool)
+	for _, t := range templates {
+		for pkg, _ := range t.Imports {
+			imports[pkg] = true
 		}
+	}
+
+	fmt.Printf("package main\n")
+	fmt.Printf("import (\n")
+	for pkg, _ := range imports {
+		fmt.Printf("\"%s\"\n", pkg)
+	}
+	fmt.Printf(")\n")
+
+	for _, t := range templates {
+
+		fmt.Printf("func %s(%s) (err error) {\n%s\nreturn\n}\n", t.FuncName, t.Parameters, t.Body.String())
 	}
 }
