@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -114,10 +115,8 @@ func (t *Template) parseBody(body []byte) (err error) {
 }
 
 func (t *Template) writeStringSegment(segment []byte) (err error) {
-	t.Body.WriteString("io.WriteString(writer, `")
-	t.Body.Write(segment)
-	t.Body.WriteString("`)\n")
-	return nil
+	_, err = writeWrapped(&t.Body, "io.WriteString(writer, `", segment, "`)\n")
+	return err
 }
 
 func (t *Template) writeInterpolationSegment(segment []byte) (err error) {
@@ -134,10 +133,8 @@ func (t *Template) writeInterpolationSegment(segment []byte) (err error) {
 }
 
 func (t *Template) writeIntegerInterpolationSegment(segment []byte) (err error) {
-	t.Body.WriteString("io.WriteString(writer, strconv.FormatInt(int64(")
-	t.Body.Write(segment)
-	t.Body.WriteString("), 10))\n")
-	return nil
+	_, err = writeWrapped(&t.Body, "io.WriteString(writer, strconv.FormatInt(int64(", segment, "), 10))\n")
+	return err
 }
 
 func (t *Template) writeStringInterpolationSegment(segment []byte) (err error) {
@@ -153,23 +150,35 @@ func (t *Template) writeStringInterpolationSegment(segment []byte) (err error) {
 }
 
 func (t *Template) writeRawStringInterpolationSegment(segment []byte) (err error) {
-	t.Body.WriteString("io.WriteString(writer, ")
-	t.Body.Write(segment)
-	t.Body.WriteString(")\n")
-	return nil
+	_, err = writeWrapped(&t.Body, "io.WriteString(writer, ", segment, ")\n")
+	return err
 }
 
 func (t *Template) writeHTMLEscapedStringInterpolationSegment(segment []byte) (err error) {
-	t.Body.WriteString("io.WriteString(writer, html.EscapeString(")
-	t.Body.Write(segment)
-	t.Body.WriteString("))\n")
-	return nil
+	_, err = writeWrapped(&t.Body, "io.WriteString(writer, html.EscapeString(", segment, "))\n")
+	return err
 }
 
 func (t *Template) writeGoSegment(segment []byte) (err error) {
-	t.Body.Write(segment)
-	t.Body.WriteString("\n")
-	return nil
+	_, err = writeMultiple(&t.Body, segment, []byte("\n"))
+	return err
+}
+
+func writeWrapped(w io.Writer, prefix string, data []byte, suffix string) (count int64, err error) {
+	return writeMultiple(w, []byte(prefix), data, []byte(suffix))
+}
+
+func writeMultiple(w io.Writer, segments ...[]byte) (count int64, err error) {
+	for _, s := range segments {
+		var n int
+		n, err = w.Write(s)
+		count += int64(n)
+		if err != nil {
+			return
+		}
+	}
+
+	return count, err
 }
 
 func main() {
