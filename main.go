@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -271,13 +272,20 @@ func extractImports(templates []*Template) (imports Imports) {
 }
 
 func main() {
-	templates, err := parseTemplateFiles(os.Args[1:])
+	var args struct {
+		pkg string
+	}
+
+	flag.StringVar(&args.pkg, "package", "main", "package to which compiled templates belong")
+	flag.Parse()
+
+	templates, err := parseTemplateFiles(flag.Args())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	_, err = fmt.Fprintf(os.Stdout, "package main\n")
+	_, err = fmt.Fprintf(os.Stdout, "package %s\n", args.pkg)
 	if err != nil {
 		return
 	}

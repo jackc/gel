@@ -1,4 +1,3 @@
-package: main
 func: Imports
 imports: crypto/subtle
 ---

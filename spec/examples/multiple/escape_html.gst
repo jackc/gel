@@ -1,4 +1,3 @@
-package: main
 func: EscapeHtml
 escape: html
 ---

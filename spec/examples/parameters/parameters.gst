@@ -1,4 +1,3 @@
-package: main
 func: Parameters
 parameters: name string, times int
 ---
