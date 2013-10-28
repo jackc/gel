@@ -18,6 +18,34 @@ type Template struct {
 	Segments   []io.WriterTo
 }
 
+type Imports []string
+
+func (i Imports) WriteTo(w io.Writer) (total int64, err error) {
+	var n int
+
+	n, err = fmt.Fprintf(w, "import (\n")
+	total += int64(n)
+	if err != nil {
+		return
+	}
+
+	for _, pkg := range i {
+		n, err = fmt.Fprintf(w, "\"%s\"\n", pkg)
+		total += int64(n)
+		if err != nil {
+			return
+		}
+	}
+
+	n, err = fmt.Fprintf(w, ")\n")
+	total += int64(n)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
 type StringSegment []byte
 
 func (s StringSegment) WriteTo(w io.Writer) (n int64, err error) {
@@ -46,6 +74,20 @@ type HTMLEscapedStringInterpolationSegment []byte
 
 func (s HTMLEscapedStringInterpolationSegment) WriteTo(w io.Writer) (n int64, err error) {
 	return writeWrapped(w, "io.WriteString(writer, html.EscapeString(", s, "))\n")
+}
+
+func (t *Template) ParseFile(path string) error {
+	fileBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	err = t.Parse(fileBytes)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (t *Template) Parse(templateBytes []byte) (err error) {
@@ -156,6 +198,32 @@ func (t *Template) parseBody(body []byte) (err error) {
 	return nil
 }
 
+func (t *Template) WriteTo(w io.Writer) (total int64, err error) {
+	var n int
+	n, err = fmt.Printf("func %s(%s) (err error) {\n", t.FuncName, t.Parameters)
+	total += int64(n)
+	if err != nil {
+		return
+	}
+
+	for _, s := range t.Segments {
+		var n64 int64
+		n64, err = s.WriteTo(os.Stdout)
+		total += n64
+		if err != nil {
+			return
+		}
+	}
+
+	n, err = fmt.Printf("\nreturn\n}\n")
+	total += int64(n)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
 func writeWrapped(w io.Writer, prefix string, data []byte, suffix string) (count int64, err error) {
 	return writeMultiple(w, []byte(prefix), data, []byte(suffix))
 }
@@ -173,45 +241,59 @@ func writeMultiple(w io.Writer, segments ...[]byte) (count int64, err error) {
 	return count, err
 }
 
-func main() {
-
-	templates := make([]*Template, 0, len(os.Args[1:]))
-
-	for _, path := range os.Args[1:] {
-		fileBytes, err := ioutil.ReadFile(path)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
+func parseTemplateFiles(paths []string) (templates []*Template, err error) {
+	for _, path := range paths {
 		var t Template
-		err = t.Parse(fileBytes)
+		err := t.ParseFile(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid template format: %v", err)
-			os.Exit(1)
+			return templates, fmt.Errorf("Unable to parse file %v: %v", path, err)
 		}
 		templates = append(templates, &t)
 	}
 
-	imports := make(map[string]bool)
+	return templates, nil
+}
+
+func extractImports(templates []*Template) (imports Imports) {
+	importSet := make(map[string]bool)
+
 	for _, t := range templates {
 		for pkg, _ := range t.Imports {
-			imports[pkg] = true
+			importSet[pkg] = true
 		}
 	}
 
-	fmt.Printf("package main\n")
-	fmt.Printf("import (\n")
-	for pkg, _ := range imports {
-		fmt.Printf("\"%s\"\n", pkg)
+	for pkg, _ := range importSet {
+		imports = append(imports, pkg)
 	}
-	fmt.Printf(")\n")
+
+	return imports
+}
+
+func main() {
+	templates, err := parseTemplateFiles(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	_, err = fmt.Fprintf(os.Stdout, "package main\n")
+	if err != nil {
+		return
+	}
+
+	imports := extractImports(templates)
+	_, err = imports.WriteTo(os.Stdout)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	for _, t := range templates {
-		fmt.Printf("func %s(%s) (err error) {\n", t.FuncName, t.Parameters)
-		for _, s := range t.Segments {
-			s.WriteTo(os.Stdout)
+		_, err := t.WriteTo(os.Stdout)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
-		fmt.Printf("\nreturn\n}\n")
 	}
 }
