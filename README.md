@@ -12,12 +12,13 @@ GST is a templating library that compiles templates into Go functions.
 
 ## Example
 
+```
 package: main
 func: EscapeHtml
 escape: html
 ---
 <p>Hello, <%= "<Jack>" %>!</p>
-
+```
 
 ## Contributing
 
