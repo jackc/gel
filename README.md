@@ -4,26 +4,29 @@ Gel is a templating library that compiles templates into Go functions.
 
 ## Installation
 
-    $ go get gel
+```
+go get -u github.com/jackc/gel
+```
 
 ## Usage
 
-    $ gel users_index.gel | gofmt > users_index.go
+```
+gel < users_index.html | goimports > users_index.go
+```
 
 ## Example
 
 ```
-package: main
-func: EscapeHtml
-escape: html
+package main
+
+func main() {
+  t(os.Stdout)
+}
+
+func t(w io.Writer) error
 ---
-<p>Hello, <%= "<Jack>" %>!</p>
+Hello, <%= "Jack" %>!
 ```
 
-## Contributing
-
-1. Fork it
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create new Pull Request
+All text above the `---` is emitted directly into the output file. The last line must be a function signature that has a `io.Writer`
+named `w` and returns an `error`. The template below the `---` will be converted into the function body.
