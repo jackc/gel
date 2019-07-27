@@ -115,14 +115,6 @@ func (t *Template) parseBody(body []byte, escaper func([]byte) io.WriterTo) (err
 					t.Segments = append(t.Segments, IntegerInterpolationSegment(segment[2:]))
 				} else {
 					t.Segments = append(t.Segments, escaper(segment[1:]))
-					// switch t.Escape {
-					// case "":
-					// 	t.Segments = append(t.Segments, RawStringInterpolationSegment(segment[1:]))
-					// case "html":
-					// 	t.Segments = append(t.Segments, HTMLEscapedStringInterpolationSegment(segment[1:]))
-					// default:
-					// 	return errors.New("Unknown escape type")
-					// }
 				}
 			} else {
 				t.Segments = append(t.Segments, GoSegment(segment))
