@@ -48,4 +48,10 @@ class GelTest < Minitest::Test
     output = `cd #{$tmpdir}; go run escape_html.go`
     assert_equal "<p>Hello, <Jack>!</p>\n", output
   end
+
+  def test_raw_escape_override
+    gel("< test/examples/raw_escape_override.html | goimports > #{$tmpdir}/raw_escape_override.go")
+    output = `cd #{$tmpdir}; go run raw_escape_override.go`
+    assert_equal "<p>Hello, &lt;Jack&gt; <Jack>!</p>\n", output
+  end
 end

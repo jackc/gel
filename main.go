@@ -110,12 +110,12 @@ func (t *Template) parseBody(body []byte, escaper func([]byte) io.WriterTo) (err
 
 			segment := unparsed[:endGo]
 
-			if segment[0] == '=' {
-				if segment[1] == 'i' {
-					t.Segments = append(t.Segments, IntegerInterpolationSegment(segment[2:]))
-				} else {
-					t.Segments = append(t.Segments, escaper(segment[1:]))
-				}
+			if bytes.HasPrefix(segment, []byte("=i ")) {
+				t.Segments = append(t.Segments, IntegerInterpolationSegment(segment[3:]))
+			} else if bytes.HasPrefix(segment, []byte("=raw ")) {
+				t.Segments = append(t.Segments, RawStringInterpolationSegment(segment[5:]))
+			} else if bytes.HasPrefix(segment, []byte("=")) {
+				t.Segments = append(t.Segments, escaper(segment[1:]))
 			} else {
 				t.Segments = append(t.Segments, GoSegment(segment))
 			}
