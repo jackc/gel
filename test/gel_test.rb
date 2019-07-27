@@ -42,4 +42,10 @@ class GelTest < Minitest::Test
     output = `cd #{$tmpdir}; go run escape_html.go`
     assert_equal "<p>Hello, &lt;Jack&gt;!</p>\n", output
   end
+
+  def test_escape_none
+    gel("-escape=none < test/examples/escape_html.html | goimports > #{$tmpdir}/escape_html.go")
+    output = `cd #{$tmpdir}; go run escape_html.go`
+    assert_equal "<p>Hello, <Jack>!</p>\n", output
+  end
 end
