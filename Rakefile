@@ -7,12 +7,12 @@ end
 
 require 'rspec/core/rake_task'
 
-file 'gst' => ['main.go'] do
+file 'gel' => ['main.go'] do
   sh 'go build'
 end
 
-desc 'Build gst'
-task build: 'gst'
+desc 'Build gel'
+task build: 'gel'
 
 RSpec::Core::RakeTask.new(:spec)
 task spec: :build

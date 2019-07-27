@@ -1,14 +1,14 @@
-# GST - Go Static Templates
+# Gel - Embedded Go templates
 
-GST is a templating library that compiles templates into Go functions.
+Gel is a templating library that compiles templates into Go functions.
 
 ## Installation
 
-    $ go get gst
+    $ go get gel
 
 ## Usage
 
-    $ gst users_index.gst | gofmt > users_index.go
+    $ gel users_index.gel | gofmt > users_index.go
 
 ## Example
 
