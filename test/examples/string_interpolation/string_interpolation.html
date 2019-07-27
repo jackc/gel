@@ -1,3 +1,9 @@
-func: StringInterpolation
+package main
+
+func main() {
+  t(os.Stdout)
+}
+
+func t(w io.Writer) error
 ---
 Hello, <%= "Jack" %>!

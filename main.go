@@ -8,15 +8,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"strings"
 )
 
 type Template struct {
-	FuncName   string
-	Parameters string
-	Imports    map[string]bool
-	Escape     string
-	Segments   []io.WriterTo
+	GoHeader []byte
+	Segments []io.WriterTo
 }
 
 type Imports []string
@@ -50,7 +46,7 @@ func (i Imports) WriteTo(w io.Writer) (total int64, err error) {
 type StringSegment []byte
 
 func (s StringSegment) WriteTo(w io.Writer) (n int64, err error) {
-	return writeWrapped(w, "io.WriteString(writer, `", s, "`)\n")
+	return writeWrapped(w, "io.WriteString(w, `", s, "`)\n")
 }
 
 type GoSegment []byte
@@ -62,94 +58,40 @@ func (s GoSegment) WriteTo(w io.Writer) (n int64, err error) {
 type IntegerInterpolationSegment []byte
 
 func (s IntegerInterpolationSegment) WriteTo(w io.Writer) (n int64, err error) {
-	return writeWrapped(w, "io.WriteString(writer, strconv.FormatInt(int64(", s, "), 10))\n")
+	return writeWrapped(w, "io.WriteString(w, strconv.FormatInt(int64(", s, "), 10))\n")
 }
 
 type RawStringInterpolationSegment []byte
 
 func (s RawStringInterpolationSegment) WriteTo(w io.Writer) (n int64, err error) {
-	return writeWrapped(w, "io.WriteString(writer, ", s, ")\n")
+	return writeWrapped(w, "io.WriteString(w, ", s, ")\n")
 }
 
 type HTMLEscapedStringInterpolationSegment []byte
 
 func (s HTMLEscapedStringInterpolationSegment) WriteTo(w io.Writer) (n int64, err error) {
-	return writeWrapped(w, "io.WriteString(writer, html.EscapeString(", s, "))\n")
+	return writeWrapped(w, "io.WriteString(w, html.EscapeString(", s, "))\n")
 }
 
-func (t *Template) ParseFile(path string) error {
-	fileBytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	err = t.Parse(fileBytes)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (t *Template) Parse(templateBytes []byte) (err error) {
+func Parse(templateBytes []byte, escaper func([]byte) io.WriterTo) (*Template, error) {
+	t := &Template{}
 	regions := bytes.SplitN(templateBytes, []byte("\n---\n"), 2)
 
 	if len(regions) != 2 {
-		return errors.New("Did not find divider between header and body.")
+		return nil, errors.New("Did not find divider between header and body.")
 	}
 
-	err = t.parseHeader(regions[0])
+	t.GoHeader = bytes.TrimSpace(regions[0])
+
+	err := t.parseBody(regions[1], escaper)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = t.parseBody(regions[1])
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return t, nil
 }
 
-func (t *Template) parseHeader(header []byte) (err error) {
-	lines := bytes.Split(header, []byte("\n"))
-	options := make(map[string]string, len(lines))
-	for i, l := range lines {
-		pair := bytes.SplitN(l, []byte(":"), 2)
-		if len(pair) != 2 {
-			return fmt.Errorf("Bad header line: %d", i)
-		}
-		options[string(pair[0])] = string(bytes.Trim(pair[1], " "))
-	}
-
-	t.FuncName = options["func"]
-	if t.FuncName == "" {
-		return errors.New(`Missing "func"`)
-	}
-
-	t.Escape = options["escape"]
-
-	t.Parameters = "writer io.Writer"
-	var extraParameters string
-	extraParameters = options["parameters"]
-	if len(extraParameters) > 0 {
-		t.Parameters = t.Parameters + ", " + extraParameters
-	}
-
-	t.Imports = map[string]bool{"io": true}
-
-	var extraImports string
-	extraImports = options["imports"]
-	if len(extraImports) > 0 {
-		for _, pkg := range strings.Split(extraImports, " ") {
-			t.Imports[strings.Trim(pkg, " ")] = true
-		}
-	}
-
-	return nil
-}
-
-func (t *Template) parseBody(body []byte) (err error) {
+func (t *Template) parseBody(body []byte, escaper func([]byte) io.WriterTo) (err error) {
 	unparsed := body
 
 	for len(unparsed) > 0 {
@@ -170,18 +112,17 @@ func (t *Template) parseBody(body []byte) (err error) {
 
 			if segment[0] == '=' {
 				if segment[1] == 'i' {
-					t.Imports["strconv"] = true
 					t.Segments = append(t.Segments, IntegerInterpolationSegment(segment[2:]))
 				} else {
-					switch t.Escape {
-					case "":
-						t.Segments = append(t.Segments, RawStringInterpolationSegment(segment[1:]))
-					case "html":
-						t.Imports["html"] = true
-						t.Segments = append(t.Segments, HTMLEscapedStringInterpolationSegment(segment[1:]))
-					default:
-						return errors.New("Unknown escape type")
-					}
+					t.Segments = append(t.Segments, escaper(segment[1:]))
+					// switch t.Escape {
+					// case "":
+					// 	t.Segments = append(t.Segments, RawStringInterpolationSegment(segment[1:]))
+					// case "html":
+					// 	t.Segments = append(t.Segments, HTMLEscapedStringInterpolationSegment(segment[1:]))
+					// default:
+					// 	return errors.New("Unknown escape type")
+					// }
 				}
 			} else {
 				t.Segments = append(t.Segments, GoSegment(segment))
@@ -199,30 +140,37 @@ func (t *Template) parseBody(body []byte) (err error) {
 	return nil
 }
 
-func (t *Template) WriteTo(w io.Writer) (total int64, err error) {
-	var n int
-	n, err = fmt.Printf("func %s(%s) (err error) {\n", t.FuncName, t.Parameters)
+func (t *Template) WriteTo(w io.Writer) (int64, error) {
+	var total int64
+
+	n, err := w.Write(t.GoHeader)
 	total += int64(n)
 	if err != nil {
-		return
+		return total, err
+	}
+
+	n, err = fmt.Fprintf(w, " {\n")
+	total += int64(n)
+	if err != nil {
+		return total, err
 	}
 
 	for _, s := range t.Segments {
 		var n64 int64
-		n64, err = s.WriteTo(os.Stdout)
+		n64, err = s.WriteTo(w)
 		total += n64
 		if err != nil {
-			return
+			return total, err
 		}
 	}
 
-	n, err = fmt.Printf("\nreturn\n}\n")
+	n, err = fmt.Fprintf(w, "\nreturn nil\n}\n")
 	total += int64(n)
 	if err != nil {
-		return
+		return total, err
 	}
 
-	return
+	return total, nil
 }
 
 func writeWrapped(w io.Writer, prefix string, data []byte, suffix string) (count int64, err error) {
@@ -242,66 +190,38 @@ func writeMultiple(w io.Writer, segments ...[]byte) (count int64, err error) {
 	return count, err
 }
 
-func parseTemplateFiles(paths []string) (templates []*Template, err error) {
-	for _, path := range paths {
-		var t Template
-		err := t.ParseFile(path)
-		if err != nil {
-			return templates, fmt.Errorf("Unable to parse file %v: %v", path, err)
-		}
-		templates = append(templates, &t)
-	}
-
-	return templates, nil
-}
-
-func extractImports(templates []*Template) (imports Imports) {
-	importSet := make(map[string]bool)
-
-	for _, t := range templates {
-		for pkg, _ := range t.Imports {
-			importSet[pkg] = true
-		}
-	}
-
-	for pkg, _ := range importSet {
-		imports = append(imports, pkg)
-	}
-
-	return imports
-}
-
 func main() {
 	var args struct {
-		pkg string
+		escape string
 	}
 
-	flag.StringVar(&args.pkg, "package", "main", "package to which compiled templates belong")
+	flag.StringVar(&args.escape, "escape", "html", "Type of string escaping to perform (options: html, none)")
 	flag.Parse()
 
-	templates, err := parseTemplateFiles(flag.Args())
+	var escaper func(buf []byte) io.WriterTo
+
+	switch args.escape {
+	case "html":
+		escaper = func(buf []byte) io.WriterTo { return HTMLEscapedStringInterpolationSegment(buf) }
+	case "none":
+		escaper = func(buf []byte) io.WriterTo { return RawStringInterpolationSegment(buf) }
+	default:
+		fmt.Fprintln(os.Stderr, "unknown escape argument:", args.escape)
+		os.Exit(1)
+	}
+
+	templateBytes, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	_, err = fmt.Fprintf(os.Stdout, "package %s\n", args.pkg)
-	if err != nil {
-		return
-	}
-
-	imports := extractImports(templates)
-	_, err = imports.WriteTo(os.Stdout)
+	t, err := Parse(templateBytes, escaper)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	for _, t := range templates {
-		_, err := t.WriteTo(os.Stdout)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	}
+	t.WriteTo(os.Stdout)
+
 }

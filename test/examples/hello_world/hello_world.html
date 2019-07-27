@@ -1,3 +1,9 @@
-func: HelloWorld
+package main
+
+func main() {
+  HelloWorld(os.Stdout)
+}
+
+func HelloWorld(w io.Writer) error
 ---
 Hello, World!

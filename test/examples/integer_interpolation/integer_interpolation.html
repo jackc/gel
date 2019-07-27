@@ -1,3 +1,9 @@
-func: IntegerInterpolation
+package main
+
+func main() {
+  t(os.Stdout)
+}
+
+func t(w io.Writer) error
 ---
 <%=i 1 %>, <%=i int16(2) %>, <%=i int32(3) %>, <%=i int64(4) %>, <%=i int(5) %>

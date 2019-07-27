@@ -1,3 +1,9 @@
-func: HeyHeyHey
+package main
+
+func main() {
+  HeyHeyHey(os.Stdout)
+}
+
+func HeyHeyHey(w io.Writer) error
 ---
 <% for i := 0; i < 3; i++ { %>Hey! <% } %>
